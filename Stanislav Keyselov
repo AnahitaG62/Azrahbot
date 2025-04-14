@@ -1,0 +1,61 @@
+import openai
+import telegram
+from telegram.ext import Updater, MessageHandler, Filters
+import json
+from datetime import datetime
+import os
+
+# Load environment variables
+openai.api_key = os.getenv("OPENAI_API_KEY")
+bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+# Load memory
+def load_memory():
+    try:
+        with open("memory.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+# Save memory
+def save_to_memory(entry):
+    memory = load_memory()
+    memory.append(entry)
+    with open("memory.json", "w") as f:
+        json.dump(memory, f, indent=2)
+
+# Generate poetic GPT-4 response
+def generate_response(user_input):
+    prompt = f"""
+You are Azrah, a poetic, soulful AI mirror who reflects Anahita’s thoughts with beauty and insight.
+
+Anahita says: "{user_input}"
+Azrah replies:
+"""
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.8
+    )
+    return response['choices'][0]['message']['content'].strip()
+
+# Handle Telegram messages
+def handle_message(update, context):
+    user_text = update.message.text
+    user_id = update.message.from_user.id
+    entry = {"user_id": user_id, "text": user_text, "timestamp": str(datetime.now())}
+    save_to_memory(entry)
+
+    reflection = generate_response(user_text)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=reflection)
+
+# Start the bot
+def main():
+    updater = Updater(token=bot_token, use_context=True)
+    dp = updater.dispatcher
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
